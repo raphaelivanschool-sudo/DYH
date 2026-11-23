@@ -7,10 +7,44 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
-    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#17325f" },
-    "ios": { "bundleIdentifier": "ph.dyh.patient", "supportsTablet": false, "infoPlist": { "NSFaceIDUsageDescription": "Use Face ID to log in and open your medical records." } },
-    "android": { "package": "ph.dyh.patient", "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#17325f" } },
-    "plugins": ["expo-router", "expo-font", "expo-secure-store", "expo-localization", ["expo-local-authentication", { "faceIDPermission": "Use Face ID to log in and open your medical records." }]],
-    "experiments": { "typedRoutes": true }
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#17325f"
+    },
+    "ios": {
+      "bundleIdentifier": "ph.dyh.patient",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to log in and open your medical records."
+      }
+    },
+    "android": {
+      "package": "ph.dyh.patient",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#17325f"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to log in and open your medical records."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    }
   }
 }

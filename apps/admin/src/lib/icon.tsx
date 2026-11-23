@@ -11,6 +11,7 @@ const ALIASES: Record<string, string> = {
   'help-circle': 'circle-question-mark',
   filter: 'funnel',
   text: 'type',
+  fingerprint: 'fingerprint-pattern',
 };
 
 /**

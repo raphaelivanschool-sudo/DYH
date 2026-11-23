@@ -1,3 +1,12 @@
 import '../global.css';
 import { Stack } from 'expo-router';
-export default function Root() { return <Stack screenOptions={{ headerShown: false }} />; }
+import { DyhAppRoot } from '@dyh/ui-native';
+import { api } from '../src/api';
+
+export default function Root() {
+  return (
+    <DyhAppRoot api={api} prefsKey="dyh-patient-prefs">
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+    </DyhAppRoot>
+  );
+}
