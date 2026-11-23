@@ -1,0 +1,16 @@
+{
+  "name": "@dyh/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tagalog / English translations (i18next) shared by every DYH app.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@dyh/core": "workspace:*",
+    "i18next": "^25.6.0",
+    "react-i18next": "^16.2.4"
+  },
+  "peerDependencies": { "react": "*" },
+  "devDependencies": { "@types/react": "~19.2.2", "typescript": "~5.9.3" }
+}

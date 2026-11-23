@@ -1,0 +1,33 @@
+{
+  "name": "dyh",
+  "private": true,
+  "description": "DYH Outpatient Management System — front-end monorepo (Admin web + Patient, Doctor, Secretary, Kiosk mobile apps)",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:admin": "pnpm --filter @dyh/admin dev",
+    "dev:patient": "pnpm --filter @dyh/patient start",
+    "dev:doctor": "pnpm --filter @dyh/doctor start",
+    "dev:secretary": "pnpm --filter @dyh/secretary start",
+    "dev:kiosk": "pnpm --filter @dyh/kiosk start",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.13",
+    "typescript": "~5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "overrides": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0"
+    }
+  }
+}

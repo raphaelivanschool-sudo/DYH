@@ -1,0 +1,10 @@
+{
+  "name": "@dyh/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DYH design tokens (brand colours, light/dark themes, radii, type) for web and native.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "devDependencies": { "typescript": "~5.9.3" }
+}

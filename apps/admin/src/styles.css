@@ -1,0 +1,74 @@
+@import 'tailwindcss';
+
+/* Dark mode is class-based so the Admin can toggle it in Settings. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- DYH tokens (mirrors packages/tokens/src/palette.json) ---------- */
+:root {
+  --bg: #eef2f8; --scr: #f4f7fb; --card: #ffffff; --field: #ffffff; --soft: #e6ecf5; --tog: #cfd8e6;
+  --ink: #14213d; --muted: #5b6b85; --line: #dbe3ef;
+  --navy: #17325f; --navy-2: #0f2447; --primary: #1f56b0; --blue: #1f56b0; --blue-2: #2d6cdf; --sky: #e8f0fb; --sky-2: #f3f7fd;
+  --green: #12805a; --green-bg: #e2f4ec; --amber: #a76200; --amber-bg: #fff1d6; --red: #c42f3a; --red-bg: #fde6e8;
+  --purple: #6a3db5; --purple-bg: #eee7fb; --teal: #0d7a86; --teal-bg: #e0f3f5; --gray: #55627a; --gray-bg: #eceff4;
+  --prio: #a04a00; --prio-bg: #fde9d6; --shadow: rgba(15, 36, 71, 0.12);
+  --pat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%232d6cdf' stroke-opacity='.10' stroke-width='1.2'%3E%3Cpath d='M0 60 C 80 20 160 100 240 60 S 360 20 400 50'/%3E%3Cpath d='M0 80 C 80 40 160 120 240 80 S 360 40 400 70'/%3E%3Cpath d='M0 100 C 80 60 160 140 240 100 S 360 60 400 90'/%3E%3C/g%3E%3C/svg%3E") top/100% 300px no-repeat,
+    radial-gradient(70% 40% at 105% -5%, rgba(45, 108, 223, 0.2), transparent 70%),
+    radial-gradient(60% 35% at -10% 105%, rgba(18, 160, 120, 0.13), transparent 70%);
+  color-scheme: light;
+}
+.dark {
+  --bg: #0a1019; --scr: #0f1622; --card: #172030; --field: #121a27; --soft: #202b3d; --tog: #3a4760;
+  --ink: #e7edf7; --muted: #9aa9c1; --line: #2a374c;
+  --navy: #1c3a6e; --navy-2: #09111e; --primary: #2d6cdf; --blue: #82b0ff; --blue-2: #4a86f0; --sky: #1a2a47; --sky-2: #142036;
+  --green: #4ccf97; --green-bg: #123628; --amber: #f2b64a; --amber-bg: #3a2b0f; --red: #ff808a; --red-bg: #401b21;
+  --purple: #b799ff; --purple-bg: #2b2145; --teal: #55cbd8; --teal-bg: #10333a; --gray: #aab6ca; --gray-bg: #253045;
+  --prio: #ffb46d; --prio-bg: #3d2914; --shadow: rgba(0, 0, 0, 0.45);
+  --pat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%2382b0ff' stroke-opacity='.14' stroke-width='1.2'%3E%3Cpath d='M0 60 C 80 20 160 100 240 60 S 360 20 400 50'/%3E%3Cpath d='M0 80 C 80 40 160 120 240 80 S 360 40 400 70'/%3E%3C/g%3E%3C/svg%3E") top/100% 300px no-repeat,
+    radial-gradient(70% 40% at 105% -5%, rgba(45, 108, 223, 0.3), transparent 70%);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-bg: var(--bg); --color-scr: var(--scr); --color-card: var(--card); --color-field: var(--field);
+  --color-soft: var(--soft); --color-tog: var(--tog); --color-ink: var(--ink); --color-muted: var(--muted); --color-line: var(--line);
+  --color-navy: var(--navy); --color-navy-2: var(--navy-2); --color-primary: var(--primary); --color-blue: var(--blue); --color-blue-2: var(--blue-2);
+  --color-sky: var(--sky); --color-sky-2: var(--sky-2);
+  --color-green: var(--green); --color-green-bg: var(--green-bg); --color-amber: var(--amber); --color-amber-bg: var(--amber-bg);
+  --color-red: var(--red); --color-red-bg: var(--red-bg); --color-purple: var(--purple); --color-purple-bg: var(--purple-bg);
+  --color-teal: var(--teal); --color-teal-bg: var(--teal-bg); --color-gray: var(--gray); --color-gray-bg: var(--gray-bg);
+  --color-prio: var(--prio); --color-prio-bg: var(--prio-bg);
+  --shadow-lift: 0 18px 40px -16px var(--shadow);
+  --shadow-seg: 0 1px 3px var(--shadow);
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-bg font-sans text-[14px] leading-[1.45] text-ink antialiased; }
+  button { cursor: pointer; }
+  svg.lucide { flex-shrink: 0; }
+  h1, h2, h3, h4 { line-height: 1.2; font-weight: 700; }
+}
+
+@layer utilities {
+  .bg-pattern { background: var(--pat), var(--scr); }
+  .bg-hero { background: linear-gradient(155deg, #2d6cdf 0%, #17325f 62%, #0f2447 100%); }
+  .bg-splash { background: linear-gradient(160deg, #2d6cdf 0%, #17325f 55%, #0b1a36 100%); }
+  .wdeco {
+    position: absolute; inset: 0; pointer-events: none;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 260' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.12' stroke-width='1.3'%3E%3Cpath d='M0 170 C 90 120 170 220 260 170 S 380 120 400 150'/%3E%3Cpath d='M0 195 C 90 145 170 245 260 195 S 380 145 400 175'/%3E%3Cpath d='M0 220 C 90 170 170 270 260 220 S 380 170 400 200'/%3E%3C/g%3E%3C/svg%3E") bottom/100% 100% no-repeat,
+      radial-gradient(circle at 88% 8%, rgba(255, 255, 255, 0.22), transparent 38%),
+      radial-gradient(circle at 5% 95%, rgba(76, 207, 151, 0.25), transparent 40%);
+  }
+  .aisum { border-color: var(--purple); background: linear-gradient(160deg, var(--purple-bg), var(--card) 55%); }
+}
+
+@keyframes dyh-grow { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+@keyframes dyh-load { from { width: 0; } to { width: 100%; } }
+@keyframes dyh-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes dyh-fadeup { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 0.95; } }
+.anim-grow { animation: dyh-grow 2.6s ease-out infinite; }
+.anim-grow-2 { animation: dyh-grow 2.6s ease-out 1.3s infinite; }
+.anim-load { animation: dyh-load 2.4s ease-in-out forwards; }
+.anim-pop { animation: dyh-pop 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.anim-fadeup { opacity: 0; animation: dyh-fadeup 0.7s 0.5s forwards; }
