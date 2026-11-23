@@ -86,6 +86,8 @@ export function createHttpApi(o: HttpOptions): DyhApi {
 
     queueAction: (id, action, index) => post(`/queues/${id}/${action}`, { index }),
     saveVitals: (n, v) => put(`/vitals/${n}`, v),
+    getDelegated: (id) => get(`/doctors/${id}/delegated`),
+    submitFindingsDraft: (i) => post('/drafts', i),
     sendPatientNotice: (i) => post('/notices', i),
 
     kioskScan: (code) => post('/kiosk/scan', { code }),

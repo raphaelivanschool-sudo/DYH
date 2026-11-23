@@ -5,6 +5,7 @@
  * "live" queue updates across screens like a websocket would.
  */
 import {
+  DELEGATED_DONE,
   ADMINS, AI_GUIDE, ANNOUNCEMENTS, AUDIT_LOGS, DEFAULT_SETTINGS, DEMO_NOW_HOUR, DEMO_TODAY, DOCTOR_HISTORY,
   DOCTOR_NOTIFICATIONS, DOCTOR_PATIENTS, DOCTORS, DRAFTS, FAMILY, GENERATED_REPORTS, MASTER_PATIENTS, ME,
   MY_BOOKINGS, MY_CONSULTATIONS, MY_RECORDS, PASSWORD_REQUESTS, PATIENT_NOTIFICATIONS, QUEUES, RATING_COMMENTS,
@@ -13,9 +14,9 @@ import {
   routeAiQuestion, scanOpensAtLabel, seededInt, shortHash, weekFromDoctor,
   type BlockedDate, type Booking, type ClinicConfig, type DoctorQueue, type DoctorSchedule, type Patient, type QueueEntry,
 } from '@dyh/core';
-import type { DyhApi } from './contract';
+import type { DelegatedPatient, DyhApi } from './contract';
 
-const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+const clone = <T>(x: T): T => (x === undefined ? x : JSON.parse(JSON.stringify(x)));
 
 export interface MockOptions {
   /** Artificial latency in ms (default 250). */
@@ -45,6 +46,7 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
     pwRequests: clone(PASSWORD_REQUESTS),
     audit: clone(AUDIT_LOGS),
     ratings: { c1: 5 } as Record<string, number>,
+    delegated: clone(DELEGATED_DONE) as Record<string, DelegatedPatient[]>,
     drafts: clone(DRAFTS).map((d) => ({ ...d, signed: false, followUpDone: false })),
     schedules: {} as Record<string, DoctorSchedule>,
     records: clone(DOCTOR_HISTORY),
@@ -282,6 +284,17 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
     async saveVitals(number, v) {
       db.vitals[number] = { ...v, recordedAt: '10:30 AM', recordedBy: 'Carla Ramos' };
       emit('vitals');
+      return wait(undefined);
+    },
+    getDelegated: (doctorId) => wait(db.delegated[doctorId] ?? []),
+    async submitFindingsDraft(input) {
+      const row = db.delegated[input.doctorId]?.find((x) => x.number === input.queueNumber);
+      if (row) row.drafted = input.mode;
+      const p = db.patients.find((x) => x.displayName === input.patientName);
+      const patientId = p?.id ?? `DYH-2026-00${5000 + db.patients.length}`;
+      db.drafts = db.drafts.filter((d) => d.patientId !== patientId);
+      db.drafts.push({ patientId, preparedBy: 'Carla Ramos', preparedAt: '10:40 AM', source: 'delegated', mode: input.mode, followUp: input.followUp && { date: input.followUp.date, purpose: { tl: input.followUp.purpose, en: input.followUp.purpose } }, signed: false, followUpDone: false });
+      emit('drafts');
       return wait(undefined);
     },
     async sendPatientNotice(input) {

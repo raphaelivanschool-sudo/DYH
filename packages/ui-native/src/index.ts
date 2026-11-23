@@ -15,3 +15,4 @@ export * from './extras';
 export * from './root';
 export * from './staff';
 export * from './announcement';
+export * from './consult';

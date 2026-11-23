@@ -72,6 +72,26 @@ export interface NewStaffAccount {
   linkedDoctorId?: string;
 }
 
+/** A patient whose consultation is done and who can get a findings draft (Secretary → Findings Draft). */
+export interface DelegatedPatient {
+  name: string;
+  number: string;
+  time: string;
+  /** The doctor asked the secretary to fill this in. */
+  delegated: boolean;
+  note?: Localized;
+  /** Set once the secretary has sent a draft. */
+  drafted?: 'text' | 'photo';
+}
+
+export interface FindingsDraftInput extends Omit<SignConsultationInput, 'doctorId' | 'verifiedWith' | 'source'> {
+  doctorId: string;
+  queueNumber: string;
+  patientName: string;
+  mode: 'text' | 'photo';
+  followUp?: { date: ISODate; purpose: string };
+}
+
 export interface DyhApi {
   clock(): ClinicClock;
 
@@ -123,6 +143,10 @@ export interface DyhApi {
   /* ---- secretary ---- POST /queues/{doctorId}/{action} */
   queueAction(doctorId: string, action: 'start' | 'skip' | 'done' | 'callBack' | 'noShow', index?: number): Promise<DoctorQueue>;
   saveVitals(queueNumber: string, v: Vitals): Promise<void>;
+  /** GET /doctors/{id}/delegated — patients done today, for findings drafts. */
+  getDelegated(doctorId: string): Promise<DelegatedPatient[]>;
+  /** POST /drafts — secretary's draft; the doctor reviews and signs it. */
+  submitFindingsDraft(input: FindingsDraftInput): Promise<void>;
   sendPatientNotice(input: { doctorId: string; date?: ISODate; template: string; message: string; channels: ('app' | 'sms')[] }): Promise<{ sent: number }>;
 
   /* ---- kiosk ---- */
