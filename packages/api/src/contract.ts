@@ -7,7 +7,7 @@
  * When the backend is ready, switch the adapter in each app's `api.ts` — screens don't change.
  */
 import type {
-  AdminAccount, Announcement, ClinicConfig, AppId, AppNotification, AuditLogEntry, BlockedDate, Booking, ConsultationDraft,
+  Address, AdminAccount, Announcement, BloodType, ClinicConfig, AppId, AppNotification, AuditLogEntry, BlockedDate, Booking, ConsultationDraft,
   ConsultationRecord, DayAvailability, Doctor, DoctorLiveStatus, DoctorQueue, DoctorSchedule, FamilyMember,
   FollowUp, GeneratedReport, ISODate, Localized, PasswordResetRequest, PastConsultation, Patient, Prescription,
   Priority, QueueEntry, RatingComment, RelationKey, Room, Secretary, Session, Specialization, SystemSettings, Vitals,
@@ -49,6 +49,10 @@ export interface KioskRegistration {
   sex: 'M' | 'F';
   mobile: string;
   priority: Priority | null;
+  address?: Address;
+  bloodType?: BloodType;
+  allergies?: string[];
+  emergencyContact?: Patient['emergencyContact'];
 }
 
 export interface KioskScanResult {
@@ -57,7 +61,12 @@ export interface KioskScanResult {
   doctorId?: string;
   opensAt?: string;
   position?: number;
+  /** Issued instead of a number when it is too early (scan it again once the window opens). */
+  walkInQr?: string;
 }
+
+/** Step 1: mobile only → OTP is sent. Step 2: mobile + otp, or a Record QR token → the patient. */
+export type KioskIdentifyInput = { mobile: string; otp?: string } | { recordQr: string };
 
 export interface NewStaffAccount {
   kind: 'doctor' | 'secretary' | 'admin';
@@ -153,6 +162,8 @@ export interface DyhApi {
   kioskScan(code: string): Promise<KioskScanResult>;
   kioskJoin(doctorId: string, patient: { id: string; name: string; priority: Priority | null }): Promise<KioskScanResult>;
   kioskRegister(r: KioskRegistration): Promise<Patient>;
+  /** POST /kiosk/identify — find an existing patient without registering again. */
+  kioskIdentify(by: KioskIdentifyInput): Promise<{ otpSent?: boolean; patient?: Patient }>;
   submitSurvey(answers: Record<string, number>): Promise<void>;
 
   /* ---- admin ---- */

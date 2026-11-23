@@ -52,6 +52,8 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
     records: clone(DOCTOR_HISTORY),
     patients: clone(DOCTOR_PATIENTS) as Patient[],
     seq: 40,
+    /** Walk-in QR → doctor and patient, for numbers issued later. */
+    walkIns: { 'WK-261030-050': { doctorId: 'd15', id: ME.id, name: ME.displayName, priority: null } } as Record<string, { doctorId: string; id: string; name: string; priority: QueueEntry['priority'] }>,
     specs: clone(SPECIALIZATIONS),
     clinics: SPECIALIZATIONS.map((sp) => ({
       specializationId: sp.id,
@@ -80,8 +82,25 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
   };
   const schedule = (doctorId: string): DoctorSchedule =>
     (db.schedules[doctorId] ??= { doctorId, week: weekFromDoctor(doctor(doctorId)), maxPatientsPerDay: 30, closeOnlineToday: false, blocked: [] });
-  const queue = (doctorId: string): DoctorQueue =>
-    (db.queues[doctorId] ??= { doctorId, serving: null, waiting: [], skipped: [], doneCount: 0, expected: [] });
+  /** Queues without seed data are filled in to match the live board, so numbers line up. */
+  const SAMPLE_NAMES = ['Lorna Garcia', 'Ramon Torres', 'Nilda Castro', 'Arnel Flores', 'Divina Ramos', 'Jun Mendoza', 'Celia Navarro', 'Ben Aquino', 'Tess Villanueva', 'Rey Santos'];
+  const queue = (doctorId: string): DoctorQueue => {
+    if (db.queues[doctorId]) return db.queues[doctorId];
+    const d = doctor(doctorId);
+    const { today, hour } = clock();
+    const live = liveStatusFor(d, today, hour);
+    const servingNo = live.nowServing ? Number(live.nowServing.split('-')[1]) : 0;
+    const num = (n: number) => `${d.queuePrefix}-${String(n).padStart(3, '0')}`;
+    const entry = (n: number, i: number): QueueEntry => ({ number: num(n), patientId: `DYH-2026-00${4100 + n}`, patientName: SAMPLE_NAMES[i % SAMPLE_NAMES.length], type: 'walkin', priority: null });
+    return (db.queues[doctorId] = {
+      doctorId,
+      serving: live.nowServing ? entry(servingNo, 9) : null,
+      waiting: Array.from({ length: live.waiting }, (_, i) => entry(servingNo + 1 + i, i)),
+      skipped: [],
+      doneCount: Math.max(0, servingNo - 1),
+      expected: [],
+    });
+  };
   const audit = (user: string, role: 'Admin' | 'Doctor' | 'Secretary', action: string, details: string) => {
     db.audit.unshift({ id: shortHash(action + Date.now()), time: '10:30 AM', user, role, action: { tl: action, en: action }, details, hash: shortHash(user + Date.now()) + '…' });
   };
@@ -130,8 +149,8 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
       return wait(
         db.doctors.map((d) => {
           const base = liveStatusFor(d, today, hour);
-          const q = db.queues[d.id];
-          return q ? { ...base, nowServing: q.serving?.number ?? base.nowServing, waiting: q.waiting.length } : base;
+          const q = base.openToday ? queue(d.id) : db.queues[d.id];
+          return q ? { ...base, nowServing: q.serving?.number ?? null, waiting: q.waiting.length, servedToday: q.doneCount } : base;
         }),
       );
     },
@@ -314,6 +333,11 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
         const e = q.expected.find((x) => x.bookingId === c);
         if (e) return wait(issueNumber(q.doctorId, { id: e.patientId, name: e.patientName, priority: e.priority, type: 'online', bookingId: e.bookingId }));
       }
+      const wk = db.walkIns[c];
+      if (wk) {
+        const r = issueNumber(wk.doctorId, { ...wk, type: 'walkin' });
+        return wait(r.status === 'too_early' ? { ...r, walkInQr: c } : r);
+      }
       const own = db.bookings.find((b) => b.id === c);
       if (own) {
         if (own.date !== clock().today) return wait({ status: 'wrong_day' as const, doctorId: own.doctorId });
@@ -322,10 +346,25 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
       }
       return wait({ status: 'not_found' as const });
     },
-    kioskJoin: async (doctorId, p) => wait(issueNumber(doctorId, { ...p, type: 'walkin' })),
+    async kioskJoin(doctorId, p) {
+      const r = issueNumber(doctorId, { ...p, type: 'walkin' });
+      if (r.status !== 'too_early') return wait(r);
+      const walkInQr = `WK-261030-0${50 + db.seq++}`;
+      db.walkIns[walkInQr] = { doctorId, ...p };
+      return wait({ ...r, walkInQr });
+    },
+    async kioskIdentify(by) {
+      if ('recordQr' in by) return wait({ patient: ME });
+      const digits = by.mobile.replace(/\D/g, '');
+      if (digits.length !== 11) throw new Error('Invalid mobile number');
+      if (!by.otp) return wait({ otpSent: true });
+      if (by.otp.length !== 6) throw new Error('Invalid OTP');
+      const p = [ME, ...db.patients].find((x) => x.mobile?.replace(/\D/g, '') === digits);
+      return wait({ patient: p ?? ME });
+    },
     async kioskRegister(r) {
       const id = `DYH-2026-00${5300 + db.seq++}`;
-      const p: Patient = { id, name: { last: r.last, first: r.first, middle: r.middle, suffix: r.suffix }, displayName: `${r.first} ${r.last}`, birthday: r.birthday, age: 2026 - Number(r.birthday.slice(0, 4)), sex: r.sex, mobile: r.mobile, bloodType: 'unknown', allergies: [], priority: r.priority };
+      const p: Patient = { id, name: { last: r.last, first: r.first, middle: r.middle, suffix: r.suffix }, displayName: `${r.first} ${r.last}`, birthday: r.birthday, age: 2026 - Number(r.birthday.slice(0, 4)), sex: r.sex, mobile: r.mobile, address: r.address, bloodType: r.bloodType ?? 'unknown', allergies: r.allergies ?? [], priority: r.priority, emergencyContact: r.emergencyContact };
       db.patients.push(p);
       return wait(p);
     },

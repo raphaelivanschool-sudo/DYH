@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "DYH Kiosk",
+    "slug": "dyh-kiosk",
+    "scheme": "dyhkiosk",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#17325f"
+    },
+    "ios": {
+      "bundleIdentifier": "ph.dyh.kiosk",
+      "supportsTablet": true,
+      "requireFullScreen": true
+    },
+    "android": {
+      "package": "ph.dyh.kiosk",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#17325f"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-localization",
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    }
+  }
+}

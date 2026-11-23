@@ -16,3 +16,4 @@ export * from './root';
 export * from './staff';
 export * from './announcement';
 export * from './consult';
+export * from './profile';

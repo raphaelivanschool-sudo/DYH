@@ -93,6 +93,7 @@ export function createHttpApi(o: HttpOptions): DyhApi {
     kioskScan: (code) => post('/kiosk/scan', { code }),
     kioskJoin: (id, p) => post(`/kiosk/queues/${id}/join`, p),
     kioskRegister: (r) => post('/kiosk/patients', r),
+    kioskIdentify: (by) => post('/kiosk/identify', by),
     submitSurvey: (a) => post('/kiosk/survey', a),
 
     getAdmins: () => get('/admin/admins'),
