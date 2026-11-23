@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "DYH Doctor",
+    "slug": "dyh-doctor",
+    "scheme": "dyhdoctor",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#17325f"
+    },
+    "ios": {
+      "bundleIdentifier": "ph.dyh.doctor",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to log in and sign consultations."
+      }
+    },
+    "android": {
+      "package": "ph.dyh.doctor",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#17325f"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-localization",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to log in and sign consultations."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    }
+  }
+}

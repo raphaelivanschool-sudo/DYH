@@ -13,3 +13,5 @@ export * from './layout';
 export * from './pin';
 export * from './extras';
 export * from './root';
+export * from './staff';
+export * from './announcement';
