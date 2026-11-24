@@ -1,0 +1,369 @@
+-- =====================================================================
+-- JSON shapes and shared business rules
+--
+-- Every builder returns exactly the JSON the apps expect (types in
+-- packages/core/src/types.ts), so the Supabase adapter passes results
+-- straight through. Rules mirror packages/core/src/rules/index.ts.
+-- =====================================================================
+
+create or replace function app.loc(t text) returns jsonb language sql immutable as $$
+  select case when t is null then null else jsonb_build_object('tl', t, 'en', t) end
+$$;
+
+create or replace function app.settings() returns jsonb language sql stable security definer set search_path = '' as $$
+  select coalesce((select s.data from public.system_settings s), '{}'::jsonb)
+$$;
+create or replace function app.setting_int(p_key text, p_default int) returns int language sql stable as $$
+  select coalesce((app.settings() ->> p_key)::int, p_default)
+$$;
+
+create or replace function app.initials(p_name text) returns text language sql immutable as $$
+  select upper(string_agg(left(w, 1), '')) from (
+    select w from regexp_split_to_table(regexp_replace(coalesce(p_name, ''), '^(Dr|Sek|Sec)\.\s*', ''), '\s+') with ordinality as t(w, i)
+     where w <> '' and w !~ ',' order by i limit 2) s
+$$;
+
+/** "Juan Dela Cruz" → "J. D. C." for screens that show other people's queue slots. */
+create or replace function app.mask_name(p_name text) returns text language sql immutable as $$
+  select string_agg(left(w, 1) || '.', ' ') from regexp_split_to_table(coalesce(p_name, ''), '\s+') w where w <> ''
+$$;
+
+/** "7:00 AM" from a fractional hour. */
+create or replace function app.hour_label(h numeric) returns text language sql immutable as $$
+  select app.time_label(('2000-01-01'::date + make_interval(mins => round(h * 60)::int))::timestamp)
+$$;
+
+/** Localized relative time for notifications. */
+create or replace function app.when_label(t timestamptz) returns jsonb language plpgsql stable as $$
+declare
+  v_local timestamp := t at time zone 'Asia/Manila';
+  v_min   int := floor(extract(epoch from (app.now() - v_local)) / 60);
+  v_tl    text[] := array['Ene','Peb','Mar','Abr','May','Hun','Hul','Ago','Set','Okt','Nob','Dis'];
+begin
+  if v_min < 1 then return jsonb_build_object('tl', 'Ngayon lang', 'en', 'Just now'); end if;
+  if v_min < 60 then return jsonb_build_object('tl', v_min || ' min ang nakalipas', 'en', v_min || ' min ago'); end if;
+  if v_local::date = app.today() then return app.loc(app.time_label(v_local)); end if;
+  if v_local::date = app.today() - 1 then return jsonb_build_object('tl', 'Kahapon', 'en', 'Yesterday'); end if;
+  return jsonb_build_object('tl', v_tl[extract(month from v_local)::int] || ' ' || extract(day from v_local),
+                            'en', to_char(v_local, 'Mon FMDD'));
+end $$;
+
+/* ------------------------------------------------------------------ */
+/* Shapes                                                              */
+/* ------------------------------------------------------------------ */
+
+create or replace function app.status_history(p_id text) returns jsonb language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object('status', h.status, 'reason', h.reason,
+           'at', to_char(h.at at time zone 'Asia/Manila', 'Mon FMDD, YYYY · ') || app.time_label(h.at), 'by', h.by_name) order by h.at desc), '[]')
+    from public.account_status_history h where h.account_id = p_id
+$$;
+
+create or replace function app.doctor_json(d public.doctors, p_private boolean default true) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'id', d.id, 'name', d.name, 'specializationId', d.specialization_id, 'room', coalesce(d.room, ''), 'floor', coalesce(d.floor, 0),
+    'clinicDays', to_jsonb(d.clinic_days), 'hours', jsonb_build_object('start', d.hours_start, 'end', d.hours_end),
+    'queuePrefix', d.queue_prefix, 'credentials', to_jsonb(d.credentials),
+    'email', case when p_private then d.email else '' end,
+    'mobile', case when p_private then d.mobile else '' end,
+    'maxPatientsPerDay', d.max_patients_per_day, 'status', d.status)
+  || case when p_private then jsonb_build_object('statusHistory', app.status_history(d.id)) else '{}'::jsonb end
+$$;
+
+create or replace function app.age_of(p public.patients) returns int language sql stable as $$
+  select coalesce(extract(year from age(app.today(), p.birthday))::int,
+                  p.approx_age + extract(year from age(app.today(), (p.created_at at time zone 'Asia/Manila')::date))::int, 0)
+$$;
+
+create or replace function app.patient_json(p public.patients) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'id', p.id,
+    'name', jsonb_strip_nulls(jsonb_build_object('last', p.last_name, 'first', p.first_name, 'middle', p.middle_name, 'suffix', p.suffix)),
+    'displayName', p.display_name, 'birthday', p.birthday, 'age', app.age_of(p), 'sex', p.sex,
+    'mobile', p.mobile, 'email', p.email, 'address', p.address, 'city', p.city, 'bloodType', p.blood_type,
+    'allergies', to_jsonb(p.allergies), 'emergencyContact', p.emergency_contact,
+    'lastVisit', (select max(c.date) from public.consultations c where c.patient_id = p.id),
+    'visits', (select count(*) from public.consultations c where c.patient_id = p.id)))
+  || jsonb_build_object('priority', p.priority)
+$$;
+
+create or replace function app.entry_json(q public.queue_entries, p_mask boolean default false) returns jsonb
+language sql stable as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'number', q.number,
+    'patientId', case when p_mask and not app.is_my_patient(q.patient_id) then '' else q.patient_id end,
+    'patientName', case when p_mask and not app.is_my_patient(q.patient_id) then app.mask_name(q.patient_name) else q.patient_name end,
+    'type', q.type, 'arrivedAt', app.time_label(q.arrived_at), 'bookingId', q.booking_id))
+  || jsonb_build_object('priority', q.priority)
+$$;
+
+create or replace function app.booking_json(b public.bookings) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'id', b.id, 'patientId', b.patient_id,
+    'patientName', (select p.display_name from public.patients p where p.id = b.patient_id),
+    'doctorId', b.doctor_id, 'date', b.date, 'type', b.type, 'status', b.status, 'queueNumber', b.queue_number,
+    'isFollowUp', nullif(b.is_follow_up, false), 'bookedBy', b.booked_by, 'chiefComplaint', b.chief_complaint))
+$$;
+
+create or replace function app.record_json(c public.consultations) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'id', c.id, 'patientId', c.patient_id, 'date', c.date, 'doctorId', c.doctor_id,
+    'doctorName', (select d.name from public.doctors d where d.id = c.doctor_id),
+    'type', c.type, 'title', c.title, 'diagnoses', c.diagnoses, 'findings', c.findings,
+    'prescriptions', c.prescriptions, 'labs', to_jsonb(c.labs), 'notes', c.notes, 'vitals', c.vitals,
+    'addendum', (select jsonb_build_object('date', (a.created_at at time zone 'Asia/Manila')::date, 'text', app.loc(a.text), 'authorDoctorId', a.author_doctor_id)
+                   from public.addenda a where a.consultation_id = c.id order by a.created_at desc limit 1),
+    'integrityHash', left(c.integrity_hash, 16) || '…'))
+  || jsonb_build_object('signed', true)
+$$;
+
+create or replace function app.blocked_json(b public.blocked_dates) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'doctorId', b.doctor_id, 'date', b.date, 'reason', b.reason, 'note', b.note, 'status', b.status,
+    'affected', (select count(*) from public.bookings k where k.doctor_id = b.doctor_id and k.date = b.date and k.status not in ('cancelled', 'rescheduled')),
+    'notifiedBy', b.notified_by,
+    'notifiedAt', case when b.notified_at is not null then to_char(b.notified_at at time zone 'Asia/Manila', 'Mon FMDD · ') || app.time_label(b.notified_at) end))
+$$;
+
+/* ------------------------------------------------------------------ */
+/* Clinic days and the live queue                                     */
+/* ------------------------------------------------------------------ */
+
+create or replace function app.has_clinic_on(d public.doctors, p_date date) returns boolean language sql stable as $$
+  select extract(dow from p_date)::int = any (d.clinic_days)
+$$;
+
+create or replace function app.is_blocked(p_doctor text, p_date date) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.blocked_dates b where b.doctor_id = p_doctor and b.date = p_date)
+$$;
+
+/** Clinic today, not blocked, and not past closing time. */
+create or replace function app.open_today(d public.doctors) returns boolean language sql stable as $$
+  select d.status = 'active' and app.has_clinic_on(d, app.today()) and not app.is_blocked(d.id, app.today()) and app.hour() < d.hours_end
+$$;
+
+create or replace function app.queue_json(p_doctor text, p_mask boolean default false) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'doctorId', p_doctor,
+    'serving', (select app.entry_json(q, p_mask) from public.queue_entries q where q.doctor_id = p_doctor and q.date = app.today() and q.status = 'serving'),
+    'waiting', coalesce((select jsonb_agg(app.entry_json(q, p_mask) order by q.sort_key) from public.queue_entries q
+                          where q.doctor_id = p_doctor and q.date = app.today() and q.status = 'waiting'), '[]'),
+    'skipped', coalesce((select jsonb_agg(app.entry_json(q, p_mask) order by q.skipped_at) from public.queue_entries q
+                          where q.doctor_id = p_doctor and q.date = app.today() and q.status = 'skipped'), '[]'),
+    'doneCount', (select count(*) from public.queue_entries q where q.doctor_id = p_doctor and q.date = app.today() and q.status = 'done'),
+    'expected', case when p_mask then '[]'::jsonb else coalesce((
+      select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+               'bookingId', b.id, 'patientId', b.patient_id, 'patientName', p.display_name,
+               'bookedBy', b.booked_by, 'chiefComplaint', app.loc(b.chief_complaint)))
+             || jsonb_build_object('priority', p.priority) order by b.created_at)
+        from public.bookings b join public.patients p on p.id = b.patient_id
+       where b.doctor_id = p_doctor and b.date = app.today() and b.queue_number is null
+         and b.status in ('booked', 'confirmed', 'unconfirmed')), '[]') end)
+$$;
+
+/**
+ * Issue a queue number at the Kiosk. Same rules as issueNumber() in the mock:
+ * scan window, daily cap, priority lane, one active number per patient per doctor.
+ * Returns a KioskScanResult.
+ */
+create or replace function app.issue_number(p_doctor text, p_patient text, p_type text, p_booking text default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  d        public.doctors;
+  p        public.patients;
+  e        public.queue_entries;
+  v_today  date := app.today();
+  v_win    int := app.setting_int('scanWindowMinutes', 60);
+  v_seq    int;
+  v_first  numeric;
+  v_before numeric;
+  v_key    numeric;
+begin
+  select * into d from public.doctors where id = p_doctor;
+  if not found then return jsonb_build_object('status', 'not_found'); end if;
+  select * into p from public.patients where id = p_patient;
+  if not found then return jsonb_build_object('status', 'not_found'); end if;
+
+  perform pg_advisory_xact_lock(hashtext('dyh.queue.' || p_doctor || '.' || v_today));
+
+  -- Already holding a number today: hand the same one back.
+  select * into e from public.queue_entries
+   where doctor_id = p_doctor and date = v_today and patient_id = p_patient and status in ('waiting', 'serving', 'skipped');
+  if found then
+    return jsonb_build_object('status', 'issued', 'doctorId', p_doctor, 'entry', app.entry_json(e),
+      'position', (select count(*) from public.queue_entries w where w.doctor_id = p_doctor and w.date = v_today and w.status = 'waiting' and w.sort_key <= e.sort_key));
+  end if;
+
+  if not app.open_today(d) then
+    return jsonb_build_object('status', 'wrong_day', 'doctorId', p_doctor);
+  end if;
+
+  if app.hour() < d.hours_start - v_win / 60.0
+     and not exists (select 1 from public.queue_entries s where s.doctor_id = p_doctor and s.date = v_today and s.status = 'serving') then
+    return jsonb_build_object('status', 'too_early', 'doctorId', p_doctor, 'opensAt', app.hour_label(d.hours_start - v_win / 60.0));
+  end if;
+
+  if (select count(*) from public.queue_entries c where c.doctor_id = p_doctor and c.date = v_today) >= d.max_patients_per_day then
+    return jsonb_build_object('status', 'full', 'doctorId', p_doctor);
+  end if;
+
+  select coalesce(max(seq), 0) + 1 into v_seq from public.queue_entries where doctor_id = p_doctor and date = v_today;
+
+  -- Priority lane: insert before the first regular patient (insertIntoQueue in @dyh/core).
+  if p.priority is not null then
+    select min(sort_key) into v_first from public.queue_entries
+     where doctor_id = p_doctor and date = v_today and status = 'waiting' and priority is null;
+  end if;
+  if v_first is not null then
+    select max(sort_key) into v_before from public.queue_entries
+     where doctor_id = p_doctor and date = v_today and status = 'waiting' and sort_key < v_first;
+    v_key := (coalesce(v_before, v_first - 1) + v_first) / 2;
+  else
+    select coalesce(max(sort_key), 0) + 1 into v_key from public.queue_entries where doctor_id = p_doctor and date = v_today;
+  end if;
+
+  insert into public.queue_entries (doctor_id, date, seq, number, patient_id, patient_name, type, priority, sort_key, booking_id, arrived_at)
+  values (p_doctor, v_today, v_seq, d.queue_prefix || '-' || lpad(v_seq::text, 3, '0'), p_patient, p.display_name, p_type, p.priority, v_key, p_booking, app.now_tz())
+  returning * into e;
+
+  if p_booking is not null then
+    update public.bookings set queue_number = e.number, status = 'arrived' where id = p_booking;
+  end if;
+
+  return jsonb_build_object('status', 'issued', 'doctorId', p_doctor, 'entry', app.entry_json(e),
+    'position', (select count(*) from public.queue_entries w where w.doctor_id = p_doctor and w.date = v_today and w.status = 'waiting' and w.sort_key <= e.sort_key));
+end $$;
+
+/* ------------------------------------------------------------------ */
+/* Booking availability (dayAvailability in @dyh/core)                 */
+/* ------------------------------------------------------------------ */
+
+create or replace function app.day_availability(d public.doctors, p_date date, p_no_show boolean) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_today  date := app.today();
+  v_online int;
+  v_walkin int;
+  v_total  int;
+  v_cap    int := d.max_patients_per_day;
+  base     jsonb := jsonb_build_object('date', p_date, 'online', 0, 'walkin', 0, 'total', 0, 'capacity', d.max_patients_per_day, 'left', 0);
+begin
+  if extract(dow from p_date) = 0 or not app.has_clinic_on(d, p_date) then
+    return base || '{"available": false, "reason": "no_clinic"}';
+  end if;
+  if p_date < v_today or (p_date = v_today and app.hour() >= d.hours_end) then
+    return base || '{"available": false, "reason": "past"}';
+  end if;
+  if app.is_blocked(d.id, p_date) then
+    return base || '{"available": false, "reason": "blocked"}';
+  end if;
+
+  select count(*) filter (where b.type = 'online'), count(*) filter (where b.type = 'walkin' and b.queue_number is null)
+    into v_online, v_walkin
+    from public.bookings b where b.doctor_id = d.id and b.date = p_date and b.status not in ('cancelled', 'rescheduled');
+  v_walkin := v_walkin + (select count(*) from public.queue_entries q where q.doctor_id = d.id and q.date = p_date and q.booking_id is null);
+  v_total := v_online + v_walkin;
+  base := base || jsonb_build_object('online', v_online, 'walkin', v_walkin, 'total', v_total);
+
+  if v_total >= v_cap or (p_date = v_today and (select s.close_online_date from public.doctor_schedules s where s.doctor_id = d.id) = v_today) then
+    return base || '{"available": false, "reason": "full"}';
+  end if;
+  if p_date <> v_today and p_no_show then
+    return base || '{"available": false, "reason": "no_show_restriction"}';
+  end if;
+  return base || jsonb_build_object('available', true, 'left', v_cap - v_total);
+end $$;
+
+/** After a no-show, the next visit must be a same-day walk-in. */
+create or replace function app.no_show_restricted(p_patient text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce((select b.status = 'no_show' from public.bookings b
+                    where b.patient_id = p_patient and b.date < app.today() and b.status not in ('cancelled', 'rescheduled')
+                    order by b.date desc limit 1), false)
+$$;
+
+/** BK-YYMMDD-NNN / WK-YYMMDD-NNN, unique. */
+create or replace function app.next_booking_id(p_date date, p_prefix text) returns text
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_stem text := p_prefix || '-' || to_char(p_date, 'YYMMDD') || '-';
+  v_n int;
+begin
+  perform pg_advisory_xact_lock(hashtext('dyh.bk.' || v_stem));
+  select coalesce(max(split_part(x.id, '-', 3)::int), 0) + 1 into v_n from (
+    select id from public.bookings where id like v_stem || '%'
+    union all select code from public.walk_in_qrs where code like v_stem || '%') x;
+  return v_stem || lpad(v_n::text, 3, '0');
+end $$;
+
+/* ------------------------------------------------------------------ */
+/* Notifications and SMS                                               */
+/* ------------------------------------------------------------------ */
+
+create or replace function app.notify(p_app text, p_target text, p_icon text, p_tone text, p_title jsonb, p_body jsonb, p_category text default null)
+returns void language sql security definer set search_path = '' as $$
+  insert into public.notifications (app, target_id, icon, tone, title, body, category)
+  values (p_app, p_target, p_icon, p_tone, p_title, p_body, p_category)
+$$;
+
+create or replace function app.notify_secretaries(p_doctor text, p_icon text, p_tone text, p_title jsonb, p_body jsonb) returns void
+language sql security definer set search_path = '' as $$
+  insert into public.notifications (app, target_id, icon, tone, title, body)
+  select 'secretary', sd.secretary_id, p_icon, p_tone, p_title, p_body from public.secretary_doctors sd where sd.doctor_id = p_doctor
+$$;
+
+create or replace function app.queue_sms(p_mobile text, p_message text, p_purpose text default 'notice') returns void
+language sql security definer set search_path = '' as $$
+  insert into public.sms_outbox (mobile, message, purpose)
+  select regexp_replace(p_mobile, '\D', '', 'g'), p_message, p_purpose where coalesce(p_mobile, '') <> ''
+$$;
+
+/* ------------------------------------------------------------------ */
+/* One-time codes (service role only)                                  */
+/* ------------------------------------------------------------------ */
+
+/** Returns the 6-digit code to send by SMS. At most one per minute, five per hour per number. */
+create or replace function app.issue_otp(p_mobile text, p_purpose text) returns text
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_mobile text := regexp_replace(p_mobile, '\D', '', 'g');
+  v_code   text := lpad((floor(random() * 1000000))::int::text, 6, '0');
+begin
+  if length(v_mobile) <> 11 or left(v_mobile, 2) <> '09' then
+    raise exception using errcode = '22023', message = 'Invalid mobile number';
+  end if;
+  if exists (select 1 from app.otp_codes o where o.mobile = v_mobile and o.created_at > now() - interval '60 seconds') then
+    raise exception using errcode = 'P0429', message = 'Please wait a minute before requesting another code';
+  end if;
+  if (select count(*) from app.otp_codes o where o.mobile = v_mobile and o.created_at > now() - interval '1 hour') >= 5 then
+    raise exception using errcode = 'P0429', message = 'Too many codes requested. Try again later';
+  end if;
+  insert into app.otp_codes (mobile, code_hash, purpose, expires_at)
+  values (v_mobile, extensions.crypt(v_code, extensions.gen_salt('bf')), p_purpose, now() + interval '5 minutes');
+  return v_code;
+end $$;
+
+/** Checks and consumes the latest code. Five wrong tries locks it. */
+create or replace function app.check_otp(p_mobile text, p_code text, p_purpose text) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_mobile text := regexp_replace(p_mobile, '\D', '', 'g');
+  o app.otp_codes;
+begin
+  select * into o from app.otp_codes
+   where mobile = v_mobile and purpose = p_purpose and consumed_at is null and expires_at > now()
+   order by created_at desc limit 1 for update;
+  if not found or o.attempts >= 5 then return false; end if;
+  if o.code_hash = extensions.crypt(coalesce(p_code, ''), o.code_hash) then
+    update app.otp_codes set consumed_at = now() where id = o.id;
+    return true;
+  end if;
+  update app.otp_codes set attempts = attempts + 1 where id = o.id;
+  return false;
+end $$;

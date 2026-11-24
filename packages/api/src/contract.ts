@@ -65,6 +65,9 @@ export interface KioskScanResult {
   walkInQr?: string;
 }
 
+/** Patient App registration. The mobile number is the one verified by OTP, so it is not sent. */
+export type PatientRegistration = Omit<KioskRegistration, 'mobile'> & { email?: string };
+
 /** Step 1: mobile only → OTP is sent. Step 2: mobile + otp, or a Record QR token → the patient. */
 export type KioskIdentifyInput = { mobile: string; otp?: string } | { recordQr: string };
 
@@ -107,6 +110,10 @@ export interface DyhApi {
   /* ---- auth ---- POST /auth/{app}/login */
   login(app: AppId, credentials: { id: string; secret: string } | { biometric: true }): Promise<Session>;
   logout(): Promise<void>;
+  /** Sends a 6-digit SMS code. "login" for the Patient App, "kiosk" for lookup at the Kiosk. `devCode` only in development. */
+  requestOtp(mobile: string, purpose?: 'login' | 'kiosk'): Promise<{ sent: boolean; devCode?: string }>;
+  /** First sign-in with a new mobile number: creates the patient record (mobile comes from the verified sign-in). */
+  registerPatient(p: PatientRegistration): Promise<Patient>;
 
   /* ---- catalog ---- GET /specializations, /doctors, /doctors/live, /rooms */
   getSpecializations(): Promise<Specialization[]>;

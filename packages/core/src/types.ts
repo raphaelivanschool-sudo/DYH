@@ -447,4 +447,6 @@ export interface Session {
   initials: string;
   role?: AdminAccount['role'];
   token: string;
+  /** Patient signed in with a verified mobile number that has no record yet. */
+  needsRegistration?: boolean;
 }

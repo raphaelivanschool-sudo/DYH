@@ -1,0 +1,6 @@
+# Minimal Supabase CLI config (only what this project needs).
+project_id = "dyh"
+
+# The "dyh" function checks Firebase sign-in tokens itself, so the gateway must let them through.
+[functions.dyh]
+verify_jwt = false

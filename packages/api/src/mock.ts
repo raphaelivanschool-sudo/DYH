@@ -141,6 +141,11 @@ export function createMockApi(opts: MockOptions = {}): DyhApi & { subscribe(fn: 
     async logout() {
       return wait(undefined);
     },
+    requestOtp: () => wait({ sent: true, devCode: '482913' }),
+    async registerPatient(r) {
+      const p: Patient = { ...ME, name: { last: r.last, first: r.first, middle: r.middle, suffix: r.suffix }, displayName: `${r.first} ${r.last}`, birthday: r.birthday, sex: r.sex, address: r.address, bloodType: r.bloodType ?? 'unknown', allergies: r.allergies ?? [], priority: r.priority, emergencyContact: r.emergencyContact };
+      return wait(p);
+    },
 
     getSpecializations: () => wait(db.specs),
     getDoctors: () => wait(db.doctors),
