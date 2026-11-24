@@ -17,6 +17,8 @@ one environment variable.
 
 ```
 dyh/
+├── supabase/         Database (tables, access rules, seed, local test) and the "dyh" Edge Function
+├── docs/BACKEND.md   How to set up Firebase + Supabase
 ├── apps/
 │   ├── admin/        React web portal (Vite, Tailwind, TanStack Query/Table)
 │   ├── patient/      Expo app
@@ -51,6 +53,7 @@ covered by unit tests, so the backend can mirror them exactly.
 - **Admin:** React 19, Vite, Tailwind CSS, TanStack Query and Table, Recharts
 - **Mobile and tablet:** Expo SDK 58, Expo Router, NativeWind (Tailwind for React Native), lucide icons, Zustand
 - **Data:** TanStack Query for server state; Zustand for session and UI state
+- **Backend:** Firebase Auth (Spark plan), Supabase Postgres + Edge Function with row-level security and Realtime
 - **Languages:** Tagalog (default) and English, switchable in every app
 - **Theme:** light and dark mode, larger-text option
 
@@ -92,7 +95,16 @@ scan windows behave the same every run (`packages/core/src/data`).
 
 ## Connecting a backend
 
-Each app reads one variable. Leave it empty for the mock; set it to use your server.
+The real backend is **Firebase Auth + Supabase**: Firebase signs people in, Supabase (Postgres) stores
+the data and enforces the rules. Everything is in this repo: `supabase/` (tables, access rules,
+server functions, seed), `supabase/functions/dyh/` (OTP sign-in, kiosk sign-in, staff accounts, SMS) and
+`packages/api/src/supabase.ts` (the adapter). **Setup steps: [docs/BACKEND.md](docs/BACKEND.md).**
+
+Each app picks its backend from its `.env` (see `.env.example` in each app folder):
+Supabase variables set → Supabase + Firebase; otherwise `API_URL` set → a custom REST server;
+nothing set → the built-in mock.
+
+The REST option below is kept for teams that prefer their own server. Each app reads one variable.
 
 | App | Variable |
 | --- | --- |
@@ -159,7 +171,7 @@ keeps no data between visitors.
 
 ## Not wired yet (needs the backend or a provider)
 
-- SMS sending, OTP delivery and push notifications (the UI and API calls exist; the mock just succeeds)
+- SMS sending needs a Semaphore API key in the Edge Function secrets (without it codes are only logged); push notifications are not wired
 - Real camera QR scanning on the Kiosk and Doctor apps (the scan screens accept typed or USB-scanner input and demo buttons)
 - AI fill from photo / voice and the AI Guide answers (mocked responses)
 - Receipt printer integration on the Kiosk ("Print Again" shows a toast)

@@ -46,6 +46,8 @@ export function createHttpApi(o: HttpOptions): DyhApi {
     },
     login: (app: AppId, c) => post(`/auth/${app}/login`, c),
     logout: () => post('/auth/logout'),
+    requestOtp: (mobile, purpose) => post('/auth/otp', { mobile, purpose }),
+    registerPatient: (p) => post('/me/register', p),
 
     getSpecializations: () => get('/specializations'),
     getDoctors: () => get('/doctors'),

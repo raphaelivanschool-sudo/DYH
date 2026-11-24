@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import { ME, type Address } from '@dyh/core';
+import { useApi } from '@dyh/api';
+import { ME, type Address, type BloodType, type RelationKey } from '@dyh/core';
 import { common, defineMessages, useT } from '@dyh/i18n';
-import { Alert, Button, Card, DateField, Field, Header, Icon, Input, LinkText, ResultView, Rich, Row, Screen, SectionTitle, Segmented, Stepper, Txt, cx } from '@dyh/ui-native';
+import { Alert, Button, Card, DateField, Field, Header, Icon, Input, LinkText, ResultView, Rich, Row, Screen, SectionTitle, Segmented, Stepper, Txt, cx, toast } from '@dyh/ui-native';
 import { AddressFields, BloodPicker, NameFields, RelationPicker, SexField, type NameValue } from '../src/components/profile-form';
 import { BioStep, OtpStep, PinCreate, useAfterAuth } from '../src/components/auth';
 import { pm } from '../src/msgs';
@@ -46,7 +47,34 @@ export default function Register() {
   const [alg, setAlg] = useState<'no' | 'yes'>('no');
   const [algTxt, setAlgTxt] = useState('');
   const [ec, setEc] = useState({ name: 'Maria Dela Cruz', mobile: '0918 222 0193', rel: 'spouse' });
-  const [otp, setOtp] = useState('482913');
+  const [otp, setOtp] = useState('');
+  const [devCode, setDevCode] = useState('482913');
+  const [busy, setBusy] = useState(false);
+  const [patientId, setPatientId] = useState(ME.id);
+  const api = useApi();
+  /** Step 2 → 3: send the SMS code. Step 3 → 4: verify it, then create the record if this number is new. */
+  const next = async () => {
+    if (step !== 2 && step !== 3) return setStep(step + 1);
+    setBusy(true);
+    try {
+      if (step === 2) {
+        const r = await api.requestOtp(mobile);
+        if (r.devCode) setDevCode(r.devCode);
+        setOtp('');
+      } else {
+        const s = await api.login('patient', { id: mobile, secret: otp });
+        const rec = s.needsRegistration
+          ? await api.registerPatient({ ...name, birthday: bday, sex, email: email || undefined, address: addr, bloodType: blood as BloodType, allergies: alg === 'yes' && algTxt ? algTxt.split(',').map((x) => x.trim()).filter(Boolean) : [], priority: null, emergencyContact: ec.name ? { name: ec.name, mobile: ec.mobile, relation: ec.rel as RelationKey } : undefined })
+          : await api.getMe();
+        setPatientId(rec.id);
+      }
+      setStep(step + 1);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const labels = [tc('privacy'), t('personal'), t('verifyMobile'), p('createPin'), 'Fingerprint'];
   const back = () => (step === 1 ? router.back() : setStep(step - 1));
 
@@ -57,7 +85,7 @@ export default function Register() {
           <Card className="mt-3 w-full flex-row items-center justify-center gap-2">
             <Icon name="id-card" size={22} color="blue" />
             <Txt w="x" size={22} style={{ letterSpacing: 1 }}>
-              {ME.id}
+              {patientId}
             </Txt>
           </Card>
           <Txt size={12.5} className="mt-3 text-muted">
@@ -138,13 +166,13 @@ export default function Register() {
           <Alert className="mt-4" text={t('sameForm')} />
         </>
       )}
-      {step === 3 && <OtpStep code="482913" value={otp} onChange={setOtp} />}
+      {step === 3 && <OtpStep code={devCode} value={otp} onChange={setOtp} />}
       {step === 4 && <PinCreate onDone={() => setStep(5)} />}
       {step === 5 && <BioStep onNext={() => setStep(6)} />}
       {step <= 3 && (
         <Row className="mt-6">
           {step > 1 && <Button variant="o" icon="chevron-left" accessibilityLabel={tc('back')} onPress={back} />}
-          <Button size="lg" className="flex-1" disabled={(step === 1 && !consent) || (step === 3 && otp.length < 6)} icon={step === 3 ? 'shield-check' : undefined} iconRight={step === 3 ? undefined : 'chevron-right'} onPress={() => setStep(step + 1)}>
+          <Button size="lg" className="flex-1" disabled={(step === 1 && !consent) || (step === 3 && otp.length < 6)} icon={step === 3 ? 'shield-check' : undefined} iconRight={step === 3 ? undefined : 'chevron-right'} loading={busy} onPress={next}>
             {step === 3 ? p('verify') : tc('next')}
           </Button>
         </Row>

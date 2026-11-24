@@ -5,11 +5,20 @@
   "description": "Typed API client for DYH. Ships a mock adapter (sample data, in-memory) and an HTTP adapter skeleton for the real backend, plus TanStack Query hooks.",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
   "dependencies": {
     "@dyh/core": "workspace:*",
-    "@tanstack/react-query": "^5.90.5"
+    "@supabase/supabase-js": "^2.119.2",
+    "@tanstack/react-query": "^5.90.5",
+    "firebase": "^13.4.0"
   },
-  "peerDependencies": { "react": "*" },
-  "devDependencies": { "@types/react": "~19.2.2", "typescript": "~5.9.3" }
+  "peerDependencies": {
+    "react": "*"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.3"
+  }
 }
